@@ -48,7 +48,7 @@ public partial class Program
         using (var scope = app.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<YouthGroupContext>();
-            db.Database.EnsureCreated();
+            DatabaseInitializer.Initialize(db);
         }
 
         // Serve static frontend files in all non-dev environments

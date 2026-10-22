@@ -35,11 +35,12 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>, IAsyn
         builder.UseEnvironment("Test");
     }
 
-    public async Task InitializeAsync()
+    public Task InitializeAsync()
     {
         using var scope = Services.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<YouthGroupContext>();
-        await context.Database.EnsureCreatedAsync();
+        DatabaseInitializer.Initialize(context);
+        return Task.CompletedTask;
     }
 
     public new async Task DisposeAsync()
