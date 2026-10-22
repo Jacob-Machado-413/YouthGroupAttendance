@@ -28,3 +28,4 @@ backend/appsettings.Local.json
 docker-compose.yml
 .direnv/
 .envrc
+scripts/deploy.sh
