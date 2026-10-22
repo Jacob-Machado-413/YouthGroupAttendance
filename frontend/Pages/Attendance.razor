@@ -111,29 +111,42 @@ else
 }
 
 <style>
-    .event-bar { display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; align-items: center; }
-    .section-card { border: 1px solid #ccc; border-radius: 6px; padding: 0.5rem 0.8rem; margin-bottom: 1rem; background: #fafafa; }
-    .grade-group { border: 1px solid #ddd; border-radius: 4px; margin-bottom: 0.3rem; overflow: hidden; }
-    .grade-header { display: flex; gap: 0.5rem; align-items: center; padding: 0.4rem 0.5rem; background: #eee; cursor: pointer; user-select: none; }
-    .grade-toggle { width: 1rem; }
-    .grade-students { padding: 0.2rem 0; }
-    .student-check { display: flex; gap: 0.5rem; align-items: center; padding: 0.3rem 0.5rem; cursor: pointer; border-bottom: 1px solid #f0f0f0; }
-    .student-check:last-child { border-bottom: none; }
-    .student-check:hover { background: #e0f0ff; }
-    .student-check.checked { background: #e6ffe6; }
+    .event-bar { display: grid; grid-template-columns: 11rem 14rem 1fr; gap: 0 1rem; margin-bottom: 1rem; align-items: end; }
+    .event-bar label { margin: 0; }
+    .event-bar input, .event-bar select { margin-bottom: 0; }
+    .section-card { border: 1px solid var(--ui-border); border-radius: 8px; padding: 0.75rem 1rem; margin-bottom: 1rem; background: var(--ui-card-bg); }
+    .section-card h3 { margin-bottom: 0.6rem; }
+    .grade-group { border: 1px solid var(--ui-border); border-radius: 6px; margin-bottom: 0.4rem; overflow: hidden; }
+    .grade-header { display: flex; gap: 0.5rem; align-items: center; padding: 0.45rem 0.6rem; background: var(--ui-sunken); cursor: pointer; user-select: none; }
+    .grade-header:hover { background: var(--ui-hover); }
+    .grade-toggle { width: 1rem; color: var(--pico-muted-color); font-size: 0.75rem; }
+    .grade-label { font-weight: 600; }
+    .grade-count { margin-left: auto; font-size: 0.85rem; color: var(--pico-muted-color); }
+    .grade-students { padding: 0; }
+    .student-check { display: grid; grid-template-columns: auto 1fr 4.5rem 11rem; gap: 0.6rem; align-items: center; width: 100%; margin: 0; padding: 0.4rem 0.6rem; cursor: pointer; border-top: 1px solid var(--ui-border); }
+    .grade-students label.student-check { width: 100%; } /* Pico sizes checkbox labels to fit-content */
+    .student-check:hover { background: var(--ui-hover); }
+    .student-check.checked { background: var(--ui-selected); }
     .student-check input { margin: 0; }
-    .check-name { flex: 1; }
-    .check-gender { width: 3rem; color: #666; font-size: 0.9rem; }
-    .check-school { width: 8rem; color: #666; font-size: 0.9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .checklist-footer { padding: 0.4rem 0.5rem 0 0.5rem; font-size: 0.9rem; }
-    .new-grid { display: flex; flex-direction: column; gap: 0.3rem; }
-    .new-header { display: flex; gap: 0.3rem; font-weight: bold; font-size: 0.85rem; padding: 0 0.2rem; }
-    .new-header span:first-child { flex: 1; }
-    .new-header span:nth-child(2) { width: 6rem; }
-    .new-row { display: flex; gap: 0.3rem; align-items: center; }
-    .btn-remove-sm { background: none; border: 1px solid #ccc; border-radius: 4px; cursor: pointer; padding: 0.2rem 0.4rem; }
-    .btn-add-row { background: none; border: 1px dashed #aaa; border-radius: 4px; cursor: pointer; padding: 0.3rem; margin-top: 0.3rem; color: #555; }
-    .btn-add-row:hover { border-color: #4a90d9; color: #4a90d9; }
+    .check-gender, .check-school { color: var(--pico-muted-color); font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .checklist-footer { padding: 0.6rem 0.6rem 0 0.6rem; font-size: 0.9rem; }
+    .checklist-footer label { margin: 0; }
+    .new-grid { display: flex; flex-direction: column; gap: 0.4rem; }
+    .new-header, .new-row { display: grid; grid-template-columns: 1fr 9rem 2.5rem; gap: 0.5rem; align-items: center; }
+    .new-header { font-weight: 600; font-size: 0.85rem; color: var(--pico-muted-color); }
+    .new-row input, .new-row select { margin: 0; }
+    .btn-remove-sm { width: 2.5rem; height: 100%; margin: 0; padding: 0; background: none; border: 1px solid var(--ui-border); border-radius: 6px; color: var(--pico-muted-color); cursor: pointer; }
+    .btn-remove-sm:hover { color: var(--ui-err-text); border-color: var(--ui-err-text); background: none; }
+    .btn-add-row { width: 100%; margin: 0.3rem 0 0; padding: 0.4rem; background: none; border: 1px dashed var(--pico-form-element-border-color); border-radius: 6px; color: var(--pico-muted-color); cursor: pointer; }
+    .btn-add-row:hover { background: var(--ui-hover); border-color: var(--pico-primary); color: var(--pico-primary); }
+    .summary { border: 1px solid var(--ui-border); border-radius: 8px; padding: 0.75rem 1rem; margin-top: 1rem; }
+    @@media (max-width: 700px) {
+        .event-bar { grid-template-columns: 10rem minmax(0, 1fr); gap: 0 0.5rem; }
+        .event-bar label:last-child { grid-column: 1 / -1; margin-top: 0.5rem; }
+        .student-check { grid-template-columns: auto 1fr 4rem; }
+        .check-school { display: none; }
+        .new-header, .new-row { grid-template-columns: 1fr 6.5rem 2.5rem; }
+    }
 </style>
 
 @code {

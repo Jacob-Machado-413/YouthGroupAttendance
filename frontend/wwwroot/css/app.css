@@ -156,3 +156,41 @@ code {
 .kpi-value { font-size: 1.6rem; font-weight: 600; line-height: 1.2; }
 .kpi-value.hero { font-size: 2.4rem; }
 .kpi-sub { font-size: 0.75rem; color: var(--pico-muted-color); }
+
+/* ── UI tokens: follow Pico's light/dark theme instead of hardcoding light colors ── */
+:root {
+    --ui-border: var(--pico-muted-border-color);
+    --ui-card-bg: var(--pico-card-background-color);
+    --ui-sunken: #f3f3f1;
+    --ui-hover: color-mix(in srgb, var(--pico-primary) 7%, transparent);
+    --ui-selected: color-mix(in srgb, var(--pico-primary) 15%, transparent);
+    --ui-ok-text: #006300;
+    --ui-ok-bg: #e6f4e6;
+    --ui-err-text: #b42323;
+    --ui-warn-bg: #fff3d4;
+    --ui-warn-border: #e5a50a;
+    --ui-crit-bg: #fde7e7;
+}
+@media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+        --ui-sunken: #1a1f29;
+        --ui-ok-text: #3ec43e;
+        --ui-ok-bg: rgba(12, 163, 12, 0.16);
+        --ui-err-text: #ef7a7a;
+        --ui-warn-bg: rgba(250, 178, 25, 0.14);
+        --ui-warn-border: #c98500;
+        --ui-crit-bg: rgba(208, 59, 59, 0.2);
+    }
+}
+:root[data-theme="dark"] {
+    --ui-sunken: #1a1f29;
+    --ui-ok-text: #3ec43e;
+    --ui-ok-bg: rgba(12, 163, 12, 0.16);
+    --ui-err-text: #ef7a7a;
+    --ui-warn-bg: rgba(250, 178, 25, 0.14);
+    --ui-warn-border: #c98500;
+    --ui-crit-bg: rgba(208, 59, 59, 0.2);
+}
+
+.text-ok { color: var(--ui-ok-text); }
+.text-err { color: var(--ui-err-text); }
