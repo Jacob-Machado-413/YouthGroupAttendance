@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using YouthGroupAttendance.Api.Data;
 using YouthGroupAttendance.Api.DTOs;
+using YouthGroupAttendance.Api.Helpers;
 using YouthGroupAttendance.Api.Models;
 using System.Text;
 
@@ -18,27 +19,6 @@ public class AttendanceController : ControllerBase
     public AttendanceController(YouthGroupContext context)
     {
         _context = context;
-    }
-
-    private static int GradeToGraduationYear(string grade)
-    {
-        var digits = new string(grade.Where(char.IsDigit).ToArray());
-        if (int.TryParse(digits, out var gradeLevel) && gradeLevel >= 1 && gradeLevel <= 12)
-        {
-            var now = DateTime.UtcNow;
-            var cutover = GetAcademicYearCutover(now.Year);
-            var academicYear = now >= cutover ? now.Year + 1 : now.Year;
-            return academicYear + (12 - gradeLevel);
-        }
-        return DateTime.UtcNow.Year + 1;
-    }
-
-    private static DateTime GetAcademicYearCutover(int year)
-    {
-        var june1 = new DateTime(year, 6, 1);
-        var daysUntilMonday = ((int)DayOfWeek.Monday - (int)june1.DayOfWeek + 7) % 7;
-        var firstMonday = june1.AddDays(daysUntilMonday);
-        return firstMonday.AddDays(6);
     }
 
     private static Models.EventType ParseEventType(string? eventType)
@@ -76,7 +56,7 @@ public class AttendanceController : ControllerBase
             student = new Student
             {
                 FullName = request.FullName,
-                GraduationYear = GradeToGraduationYear(request.Grade),
+                GraduationYear = GradeCalculator.GradeToGraduationYear(request.Grade, DateTime.UtcNow),
                 Gender = ParseGender(request.Gender),
                 School = string.IsNullOrWhiteSpace(request.School) ? null : request.School,
                 CreatedAt = DateTime.UtcNow
@@ -273,29 +253,11 @@ public class AttendanceController : ControllerBase
 
         foreach (var a in records)
         {
-            var grade = GraduationYearToGrade(a.Student.GraduationYear);
+            var grade = GradeCalculator.GraduationYearToGrade(a.Student.GraduationYear, DateTime.UtcNow);
             var notes = a.Notes ?? "";
             csv.AppendLine($"{a.Id},{a.StudentId},\"{a.Student.FullName}\",{a.Student.GraduationYear},{grade},{a.Date:yyyy-MM-dd},{a.EventType},{notes},{a.CreatedAt:yyyy-MM-dd}");
         }
 
         return File(Encoding.UTF8.GetBytes(csv.ToString()), "text/csv", $"attendance-{queryDate:yyyy-MM-dd}.csv");
-    }
-
-    private static string GraduationYearToGrade(int graduationYear)
-    {
-        var now = DateTime.UtcNow;
-        var academicYear = now.Month >= 9 ? now.Year + 1 : now.Year;
-        var gradeLevel = 12 - (graduationYear - academicYear);
-        return gradeLevel switch
-        {
-            6 => "6th",
-            7 => "7th",
-            8 => "8th",
-            9 => "9th",
-            10 => "10th",
-            11 => "11th",
-            12 => "12th",
-            _ => $"{gradeLevel}th"
-        };
     }
 }

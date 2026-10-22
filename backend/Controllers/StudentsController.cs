@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using YouthGroupAttendance.Api.Data;
 using YouthGroupAttendance.Api.DTOs;
+using YouthGroupAttendance.Api.Helpers;
 using YouthGroupAttendance.Api.Models;
 using System.Text;
 
@@ -82,8 +83,11 @@ public class StudentsController : ControllerBase
     {
         var cutoff = DateTime.UtcNow.Date.AddDays(-(weeks * 7));
 
+        var minGraduationYear = GradeCalculator.GetAcademicYear(DateTime.UtcNow);
+
         var students = await _context.Students
             .Include(s => s.Attendances)
+            .Where(s => s.GraduationYear >= minGraduationYear)
             .Where(s => !s.Attendances.Any() || s.Attendances.All(a => a.Date < cutoff))
             .ToListAsync();
 
@@ -217,30 +221,12 @@ public class StudentsController : ControllerBase
 
         foreach (var s in students)
         {
-            var grade = GraduationYearToGrade(s.GraduationYear);
+            var grade = GradeCalculator.GraduationYearToGrade(s.GraduationYear, DateTime.UtcNow);
             var gender = GenderToString(s.Gender) ?? "";
             var school = s.School ?? "";
             csv.AppendLine($"{s.Id},\"{s.FullName}\",{s.GraduationYear},{grade},{gender},\"{school}\",{s.Attendances.Count},{s.CreatedAt:yyyy-MM-dd}");
         }
 
         return File(Encoding.UTF8.GetBytes(csv.ToString()), "text/csv", "students.csv");
-    }
-
-    private static string GraduationYearToGrade(int graduationYear)
-    {
-        var now = DateTime.UtcNow;
-        var academicYear = now.Month >= 9 ? now.Year + 1 : now.Year;
-        var gradeLevel = 12 - (graduationYear - academicYear);
-        return gradeLevel switch
-        {
-            6 => "6th",
-            7 => "7th",
-            8 => "8th",
-            9 => "9th",
-            10 => "10th",
-            11 => "11th",
-            12 => "12th",
-            _ => $"{gradeLevel}th"
-        };
     }
 }

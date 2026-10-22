@@ -15,28 +15,27 @@ public static class GradeHelper
         return firstMonday.AddDays(6);
     }
 
-    /// <summary>
-    /// Converts a GraduationYear to the current grade string (e.g. "10th").
-    /// Academic year advances at the end of the first full week of June.
-    /// </summary>
-    public static string GraduationYearToGrade(int graduationYear)
+    public const string Graduated = "Graduated";
+
+    public static int GetGradeLevel(int graduationYear)
     {
         var now = DateTime.UtcNow;
         var cutover = GetGradeCutoverDate(now.Year);
         var academicYear = now >= cutover ? now.Year + 1 : now.Year;
-        var gradeLevel = 12 - (graduationYear - academicYear);
+        return 12 - (graduationYear - academicYear);
+    }
 
-        return gradeLevel switch
-        {
-            6 => "6th",
-            7 => "7th",
-            8 => "8th",
-            9 => "9th",
-            10 => "10th",
-            11 => "11th",
-            12 => "12th",
-            _ => $"{gradeLevel}th"
-        };
+    public static bool IsGraduated(int graduationYear) => GetGradeLevel(graduationYear) > 12;
+
+    /// <summary>
+    /// Converts a GraduationYear to the current grade string (e.g. "10th"),
+    /// or "Graduated" once the student is past 12th grade.
+    /// Academic year advances at the end of the first full week of June.
+    /// </summary>
+    public static string GraduationYearToGrade(int graduationYear)
+    {
+        var gradeLevel = GetGradeLevel(graduationYear);
+        return gradeLevel > 12 ? Graduated : $"{gradeLevel}th";
     }
 
     /// <summary>

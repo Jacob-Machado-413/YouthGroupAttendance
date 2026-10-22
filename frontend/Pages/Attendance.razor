@@ -156,6 +156,7 @@ else
         {
             var students = await Api.GetAllStudentsAsync();
             _grouped = students
+                .Where(s => !GradeHelper.IsGraduated(s.GraduationYear))
                 .GroupBy(s => GradeHelper.GraduationYearToGrade(s.GraduationYear))
                 .OrderBy(g => g.Key switch
                 {
