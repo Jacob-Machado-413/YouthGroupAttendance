@@ -80,6 +80,19 @@ public class ApiService
         return await _http.GetFromJsonAsync<List<StudentResponse>>($"/api/students/search?name={Uri.EscapeDataString(name)}") ?? new();
     }
 
+    /// <summary>Updates a student; throws with the server's message on validation errors.</summary>
+    public async Task<StudentDetailResponse?> UpdateStudentAsync(int id, UpdateStudentRequest request)
+    {
+        SetAuthHeader();
+        var response = await _http.PutAsJsonAsync($"/api/students/{id}", request);
+        if (!response.IsSuccessStatusCode)
+        {
+            var message = await response.Content.ReadAsStringAsync();
+            throw new InvalidOperationException(string.IsNullOrWhiteSpace(message) ? $"Save failed ({(int)response.StatusCode})." : message.Trim('"'));
+        }
+        return await response.Content.ReadFromJsonAsync<StudentDetailResponse>();
+    }
+
     public async Task<MergeStudentsResponse?> MergeStudentsAsync(MergeStudentsRequest request)
     {
         SetAuthHeader();

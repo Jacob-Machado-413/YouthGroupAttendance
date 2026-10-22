@@ -22,3 +22,15 @@
     background-color: rgba(255, 255, 255, 0.37);
     color: white;
 }
+
+@media (max-width: 700px) {
+    .nav-menu {
+        flex-direction: row;
+        flex-wrap: wrap;
+    }
+
+    .nav-menu ::deep .nav-link {
+        padding: 0.45rem 0.75rem;
+        font-size: 0.85rem;
+    }
+}

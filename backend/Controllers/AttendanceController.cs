@@ -228,10 +228,17 @@ public class AttendanceController : ControllerBase
             .OrderBy(x => x.GraduationYear)
             .ToListAsync();
 
+        var uniqueStudents = await query.Select(a => a.StudentId).Distinct().CountAsync();
+
         return Ok(new AttendanceTrendsResponse
         {
             TotalStudents = totalStudents,
             TotalAttendances = totalAttendances,
+            MeetingCount = attendanceByDate.Count,
+            UniqueStudents = uniqueStudents,
+            AveragePerMeeting = attendanceByDate.Count == 0
+                ? 0
+                : (double)totalAttendances / attendanceByDate.Count,
             AttendanceByDate = attendanceByDate,
             GradeBreakdown = gradeBreakdown
         });

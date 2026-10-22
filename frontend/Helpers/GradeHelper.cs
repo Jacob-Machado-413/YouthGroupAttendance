@@ -17,13 +17,19 @@ public static class GradeHelper
 
     public const string Graduated = "Graduated";
 
-    public static int GetGradeLevel(int graduationYear)
+    /// <summary>The calendar year in which this academic year's seniors graduate.</summary>
+    public static int GetAcademicYear()
     {
         var now = DateTime.UtcNow;
-        var cutover = GetGradeCutoverDate(now.Year);
-        var academicYear = now >= cutover ? now.Year + 1 : now.Year;
-        return 12 - (graduationYear - academicYear);
+        return now >= GetGradeCutoverDate(now.Year) ? now.Year + 1 : now.Year;
     }
+
+    /// <summary>Start of the current academic year (the most recent June cutover).</summary>
+    public static DateTime GetAcademicYearStart() => GetGradeCutoverDate(GetAcademicYear() - 1);
+
+    public static int GetGradeLevel(int graduationYear) => 12 - (graduationYear - GetAcademicYear());
+
+    public static int GradeLevelToGraduationYear(int gradeLevel) => GetAcademicYear() + (12 - gradeLevel);
 
     public static bool IsGraduated(int graduationYear) => GetGradeLevel(graduationYear) > 12;
 

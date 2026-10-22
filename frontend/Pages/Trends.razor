@@ -3,60 +3,324 @@
 
 <h2>Trends</h2>
 
-<button @onclick="@LoadTrends" disabled="@_loading">@(_loading ? "Loading..." : "Refresh")</button>
-
-@if (_trends != null)
-{
-    <div>
-        <p><strong>Total Students:</strong> @_trends.TotalStudents</p>
-        <p><strong>Total Attendances:</strong> @_trends.TotalAttendances</p>
+<div class="filter-row">
+    <div class="presets" aria-label="Date range">
+        @foreach (var p in Presets)
+        {
+            <button class="@(p.Key == _preset ? "" : "outline secondary")" @onclick="@(() => ApplyPreset(p.Key))">@p.Label</button>
+        }
     </div>
-
-    <h3>Attendance by Date</h3>
-    <table>
-        <thead>
-            <tr><th>Date</th><th>Count</th></tr>
-        </thead>
-        <tbody>
-            @foreach (var d in _trends.AttendanceByDate)
-            {
-                <tr><td>@d.Date.ToShortDateString()</td><td>@d.Count</td></tr>
-            }
-        </tbody>
-    </table>
-
-    <h3>By Graduation Year</h3>
-    <table>
-        <thead>
-            <tr><th>Grad Year</th><th>Students</th><th>Attendances</th></tr>
-        </thead>
-        <tbody>
-            @foreach (var g in _trends.GradeBreakdown)
-            {
-                <tr><td>@g.GraduationYear</td><td>@g.StudentCount</td><td>@g.AttendanceCount</td></tr>
-            }
-        </tbody>
-    </table>
-}
+    <label>From <input type="date" @bind="_from" @bind:after="OnCustomRange" /></label>
+    <label>To <input type="date" @bind="_to" @bind:after="OnCustomRange" /></label>
+</div>
 
 @if (!string.IsNullOrEmpty(_error))
 {
     <p class="error">@_error</p>
 }
 
+@if (_trends != null)
+{
+    <div class="trends-body @(_loading ? "refetching" : "")">
+        <div class="kpi-row">
+            <div class="kpi">
+                <div class="kpi-label">Average per meeting</div>
+                <div class="kpi-value hero">@(_trends.MeetingCount == 0 ? "–" : _trends.AveragePerMeeting.ToString("0.#"))</div>
+                <div class="kpi-sub">students per meeting day</div>
+            </div>
+            <div class="kpi">
+                <div class="kpi-label">Meetings</div>
+                <div class="kpi-value">@_trends.MeetingCount</div>
+                <div class="kpi-sub">days with check-ins</div>
+            </div>
+            <div class="kpi">
+                <div class="kpi-label">Total check-ins</div>
+                <div class="kpi-value">@_trends.TotalAttendances</div>
+                <div class="kpi-sub">@(_peak == null ? "" : $"peak {_peak.Count} on {_peak.Date:MMM d}")</div>
+            </div>
+            <div class="kpi">
+                <div class="kpi-label">Unique students</div>
+                <div class="kpi-value">@_trends.UniqueStudents</div>
+                <div class="kpi-sub">of @_trends.TotalStudents on the roster</div>
+            </div>
+        </div>
+
+        <h3>Students per meeting</h3>
+        @if (_points.Count == 0)
+        {
+            <p class="kpi-sub">No check-ins in this range.</p>
+        }
+        else
+        {
+            <div class="line-chart" @onmouseleave="@(() => _hover = null)">
+                <div class="plot">
+                    <svg viewBox="0 0 1000 1000" preserveAspectRatio="none" aria-hidden="true">
+                        @foreach (var t in _yTicks)
+                        {
+                            <line x1="0" x2="1000" y1="@F(Y(t))" y2="@F(Y(t))" class="@(t == 0 ? "baseline" : "grid")" />
+                        }
+                        <path d="@_areaPath" class="area" />
+                        <line x1="0" x2="1000" y1="@F(Y(_trends.AveragePerMeeting))" y2="@F(Y(_trends.AveragePerMeeting))" class="avg" />
+                        <path d="@_linePath" class="line" />
+                    </svg>
+
+                    @foreach (var t in _yTicks)
+                    {
+                        <span class="y-tick" style="top:@F(Y(t) / 10)%">@t</span>
+                    }
+                    @foreach (var x in _xTicks)
+                    {
+                        <span class="x-tick" style="left:@F(x.Pos / 10)%">@x.Label</span>
+                    }
+                    <span class="avg-label" style="top:@F(Y(_trends.AveragePerMeeting) / 10)%">avg @_trends.AveragePerMeeting.ToString("0.#")</span>
+
+                    @if (_points.Count <= 60)
+                    {
+                        @foreach (var p in _points)
+                        {
+                            <span class="dot" style="left:@F(p.X / 10)%;top:@F(p.Y / 10)%"></span>
+                        }
+                    }
+                    @if (_peak != null)
+                    {
+                        var pk = _points.First(p => p.Date == _peak.Date);
+                        <span class="peak-label" style="left:@F(pk.X / 10)%;top:@F(pk.Y / 10)%">@pk.Count</span>
+                    }
+
+                    @if (_hover is int h)
+                    {
+                        var hp = _points[h];
+                        <span class="crosshair" style="left:@F(hp.X / 10)%"></span>
+                        <span class="dot active" style="left:@F(hp.X / 10)%;top:@F(hp.Y / 10)%"></span>
+                        <div class="viz-tip" style="left:@F(hp.X / 10)%;top:0;transform:translateX(@TipShift(hp.X))">
+                            <strong>@hp.Count @(hp.Count == 1 ? "student" : "students")</strong>
+                            <span>@hp.Date.ToString("ddd, MMM d, yyyy")</span><br />
+                            <span>@VsAverage(hp.Count)</span>
+                        </div>
+                    }
+
+                    @for (int i = 0; i < _points.Count; i++)
+                    {
+                        var idx = i;
+                        var p = _points[idx];
+                        <button class="hit" style="left:@F(p.HitStart / 10)%;width:@F(p.HitWidth / 10)%"
+                                aria-label="@($"{p.Date:MMM d}: {p.Count} students")"
+                                @onmouseenter="@(() => _hover = idx)" @onfocus="@(() => _hover = idx)" @onblur="@(() => _hover = null)"></button>
+                    }
+                </div>
+            </div>
+
+            <details>
+                <summary>Table view</summary>
+                <table>
+                    <thead><tr><th>Date</th><th>Students</th></tr></thead>
+                    <tbody>
+                        @foreach (var d in _trends.AttendanceByDate)
+                        {
+                            <tr><td>@d.Date.ToString("ddd, MMM d, yyyy")</td><td>@d.Count</td></tr>
+                        }
+                    </tbody>
+                </table>
+            </details>
+        }
+
+        <h3>By grade</h3>
+        <table>
+            <thead>
+                <tr><th>Grade</th><th>Students</th><th>Check-ins</th><th>Avg per meeting</th></tr>
+            </thead>
+            <tbody>
+                @foreach (var g in _trends.GradeBreakdown.OrderByDescending(g => g.GraduationYear))
+                {
+                    <tr>
+                        <td>@GradeHelper.GraduationYearToGrade(g.GraduationYear) <span class="kpi-sub">(@g.GraduationYear)</span></td>
+                        <td>@g.StudentCount</td>
+                        <td>@g.AttendanceCount</td>
+                        <td>@(_trends.MeetingCount == 0 ? "–" : ((double)g.AttendanceCount / _trends.MeetingCount).ToString("0.#"))</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+else if (_loading)
+{
+    <p>Loading...</p>
+}
+
+<style>
+    .filter-row { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; align-items: end; margin-bottom: 0.5rem; }
+    .filter-row label { margin: 0; font-size: 0.85rem; }
+    .filter-row input { margin: 0; padding: 0.3rem 0.5rem; height: auto; }
+    .presets { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+    .presets button { padding: 0.3rem 0.7rem; font-size: 0.85rem; margin: 0; width: auto; }
+    .trends-body { transition: opacity 0.15s; }
+    .trends-body.refetching { opacity: 0.55; }
+
+    .line-chart { position: relative; height: 260px; padding: 1.25rem 3.75rem 1.75rem 2.25rem; }
+    .line-chart .plot { position: relative; width: 100%; height: 100%; }
+    .line-chart svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+    .line-chart svg * { vector-effect: non-scaling-stroke; }
+    .line-chart .grid { stroke: var(--viz-grid); stroke-width: 1; }
+    .line-chart .baseline { stroke: var(--viz-axis); stroke-width: 1; }
+    .line-chart .avg { stroke: var(--pico-muted-color); stroke-width: 1; opacity: 0.8; }
+    .line-chart .line { fill: none; stroke: var(--viz-series); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+    .line-chart .area { fill: var(--viz-series-wash); stroke: none; }
+    .line-chart .y-tick { position: absolute; right: calc(100% + 0.5rem); transform: translateY(-50%); font-size: 0.72rem; color: var(--pico-muted-color); font-variant-numeric: tabular-nums; }
+    .line-chart .x-tick { position: absolute; top: calc(100% + 0.35rem); transform: translateX(-50%); font-size: 0.72rem; color: var(--pico-muted-color); white-space: nowrap; }
+    .line-chart .avg-label { position: absolute; left: calc(100% + 0.4rem); transform: translateY(-50%); font-size: 0.75rem; color: var(--pico-muted-color); white-space: nowrap; }
+    .line-chart .peak-label { position: absolute; transform: translate(-50%, -170%); font-size: 0.75rem; font-weight: 600; }
+    .line-chart .dot { position: absolute; width: 8px; height: 8px; border-radius: 50%; background: var(--viz-series); box-shadow: 0 0 0 2px var(--viz-surface); transform: translate(-50%, -50%); pointer-events: none; }
+    .line-chart .dot.active { width: 11px; height: 11px; }
+    .line-chart .crosshair { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--viz-axis); pointer-events: none; }
+    .line-chart .hit { position: absolute; top: 0; bottom: 0; padding: 0; margin: 0; border: 0; border-radius: 0; background: transparent; cursor: crosshair; box-shadow: none; z-index: 2; }
+    .line-chart .hit:focus-visible { outline: 2px solid var(--viz-series); outline-offset: -2px; }
+    .line-chart .viz-tip { top: 0; margin-top: -0.5rem; }
+    @@media (max-width: 600px) {
+        .line-chart { height: 220px; padding-right: 3rem; }
+    }
+</style>
+
 @code {
+    private static readonly (string Key, string Label)[] Presets =
+    {
+        ("4w", "Last 4 weeks"), ("3m", "Last 3 months"), ("year", "This school year"), ("all", "All time")
+    };
+
     private AttendanceTrendsResponse? _trends;
     private bool _loading;
     private string? _error;
+    private string _preset = "3m";
+    private DateTime? _from;
+    private DateTime? _to;
+    private int? _hover;
 
-    protected override async Task OnInitializedAsync() => await LoadTrends();
+    private List<ChartPoint> _points = new();
+    private List<int> _yTicks = new();
+    private List<(double Pos, string Label)> _xTicks = new();
+    private string _linePath = "";
+    private string _areaPath = "";
+    private AttendanceByDate? _peak;
+    private double _yMax = 1;
+
+    protected override async Task OnInitializedAsync() => await ApplyPreset(_preset);
+
+    private async Task ApplyPreset(string key)
+    {
+        _preset = key;
+        var today = DateTime.Today;
+        (_from, _to) = key switch
+        {
+            "4w" => (today.AddDays(-28), today),
+            "3m" => (today.AddMonths(-3), today),
+            "year" => (GradeHelper.GetAcademicYearStart(), today),
+            _ => ((DateTime?)null, (DateTime?)null)
+        };
+        await LoadTrends();
+    }
+
+    private async Task OnCustomRange()
+    {
+        _preset = "";
+        await LoadTrends();
+    }
 
     private async Task LoadTrends()
     {
+        if (_from.HasValue && _to.HasValue && _from > _to)
+        {
+            _error = "The start date must be on or before the end date.";
+            return;
+        }
         _loading = true;
         _error = null;
-        try { _trends = await Api.GetTrendsAsync(); }
+        try
+        {
+            _trends = await Api.GetTrendsAsync(_from, _to);
+            BuildChart();
+        }
         catch (Exception ex) { _error = ex.Message; }
         finally { _loading = false; }
+    }
+
+    private void BuildChart()
+    {
+        _hover = null;
+        _points.Clear();
+        _xTicks.Clear();
+        var data = _trends?.AttendanceByDate.OrderBy(d => d.Date).ToList() ?? new();
+        _peak = data.OrderByDescending(d => d.Count).ThenBy(d => d.Date).FirstOrDefault();
+        if (data.Count == 0) return;
+
+        var max = Math.Max(data.Max(d => d.Count), (int)Math.Ceiling(_trends!.AveragePerMeeting));
+        var step = NiceStep(max);
+        _yMax = Math.Max(step, Math.Ceiling(max / (double)step) * step);
+        _yTicks = Enumerable.Range(0, (int)(_yMax / step) + 1).Select(i => i * step).ToList();
+
+        // Time scale: x position follows the calendar, so gaps in meetings show as gaps.
+        var first = data[0].Date;
+        var spanDays = Math.Max(1, (data[^1].Date - first).TotalDays);
+        double XOf(DateTime d) => data.Count == 1 ? 500 : (d - first).TotalDays / spanDays * 1000;
+
+        foreach (var d in data)
+            _points.Add(new ChartPoint { Date = d.Date, Count = d.Count, X = XOf(d.Date), Y = Y(d.Count) });
+
+        for (int i = 0; i < _points.Count; i++)
+        {
+            var left = i == 0 ? 0 : (_points[i - 1].X + _points[i].X) / 2;
+            var right = i == _points.Count - 1 ? 1000 : (_points[i].X + _points[i + 1].X) / 2;
+            _points[i].HitStart = left;
+            _points[i].HitWidth = right - left;
+        }
+
+        _linePath = "M" + string.Join(" L", _points.Select(p => $"{F(p.X)},{F(p.Y)}"));
+        _areaPath = _points.Count > 1
+            ? $"{_linePath} L{F(_points[^1].X)},1000 L{F(_points[0].X)},1000 Z"
+            : "";
+
+        // Month ticks when the range spans months, otherwise label individual dates.
+        if (spanDays > 45)
+        {
+            for (var m = new DateTime(first.Year, first.Month, 1).AddMonths(1); m <= data[^1].Date; m = m.AddMonths(1))
+                _xTicks.Add((XOf(m), m.ToString(m.Month == 1 ? "MMM yyyy" : "MMM")));
+        }
+        else
+        {
+            var every = Math.Max(1, (int)Math.Ceiling(_points.Count / 6.0));
+            for (int i = 0; i < _points.Count; i += every)
+                _xTicks.Add((_points[i].X, _points[i].Date.ToString("MMM d")));
+        }
+    }
+
+    private static int NiceStep(int max) => max switch
+    {
+        <= 5 => 1,
+        <= 10 => 2,
+        <= 25 => 5,
+        <= 50 => 10,
+        _ => (int)Math.Ceiling(max / 5.0 / 10) * 10
+    };
+
+    private double Y(double value) => 1000 - value / _yMax * 1000;
+
+    private static string F(double v) => v.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+
+    private static string TipShift(double x) => x < 150 ? "0" : x > 850 ? "-100%" : "-50%";
+
+    private string VsAverage(int count)
+    {
+        var diff = count - _trends!.AveragePerMeeting;
+        if (Math.Abs(diff) < 0.05) return "at the average";
+        return $"{(diff > 0 ? "+" : "−")}{Math.Abs(diff):0.#} vs avg";
+    }
+
+    private class ChartPoint
+    {
+        public DateTime Date { get; set; }
+        public int Count { get; set; }
+        public double X { get; set; }
+        public double Y { get; set; }
+        public double HitStart { get; set; }
+        public double HitWidth { get; set; }
     }
 }

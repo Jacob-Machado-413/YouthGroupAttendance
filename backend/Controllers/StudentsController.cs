@@ -56,27 +56,77 @@ public class StudentsController : ControllerBase
         if (student == null)
             return NotFound($"Student with ID {id} not found.");
 
-        return Ok(new StudentDetailResponse
-        {
-            Id = student.Id,
-            FullName = student.FullName,
-            GraduationYear = student.GraduationYear,
-            Gender = GenderToString(student.Gender),
-            School = student.School,
-            CreatedAt = student.CreatedAt,
-            Attendances = student.Attendances
-                .OrderByDescending(a => a.Date)
-                .Select(a => new AttendanceRecord
-                {
-                    Id = a.Id,
-                    Date = a.Date,
-                    EventType = a.EventType.ToString(),
-                    Notes = a.Notes,
-                    CreatedAt = a.CreatedAt
-                })
-                .ToList()
-        });
+        return Ok(ToDetailResponse(student));
     }
+
+    [HttpPut("{id:int}")]
+    public async Task<ActionResult<StudentDetailResponse>> UpdateStudent(int id, [FromBody] UpdateStudentRequest request)
+    {
+        var student = await _context.Students
+            .Include(s => s.Attendances)
+            .FirstOrDefaultAsync(s => s.Id == id);
+
+        if (student == null)
+            return NotFound($"Student with ID {id} not found.");
+
+        var fullName = request.FullName?.Trim() ?? "";
+        if (fullName.Length == 0)
+            return BadRequest("Name is required.");
+        if (fullName.Length > 100)
+            return BadRequest("Name must be 100 characters or fewer.");
+
+        var school = string.IsNullOrWhiteSpace(request.School) ? null : request.School.Trim();
+        if (school?.Length > 100)
+            return BadRequest("School must be 100 characters or fewer.");
+
+        Gender? gender = null;
+        if (!string.IsNullOrWhiteSpace(request.Gender))
+        {
+            if (!Enum.TryParse<Gender>(request.Gender, ignoreCase: true, out var parsed) || !Enum.IsDefined(parsed))
+                return BadRequest($"Unknown gender '{request.Gender}'.");
+            gender = parsed;
+        }
+
+        var academicYear = GradeCalculator.GetAcademicYear(DateTime.UtcNow);
+        if (request.GraduationYear < academicYear - 20 || request.GraduationYear > academicYear + 12)
+            return BadRequest($"Graduation year {request.GraduationYear} is out of range.");
+
+        // Check-in matches students by name, so names must stay unique.
+        var lowerName = fullName.ToLower();
+        var duplicate = await _context.Students
+            .AnyAsync(s => s.Id != id && s.FullName.ToLower() == lowerName);
+        if (duplicate)
+            return Conflict($"Another student is already named '{fullName}'. Use Merge in Settings if they're the same person.");
+
+        student.FullName = fullName;
+        student.GraduationYear = request.GraduationYear;
+        student.Gender = gender;
+        student.School = school;
+        await _context.SaveChangesAsync();
+
+        return Ok(ToDetailResponse(student));
+    }
+
+    private static StudentDetailResponse ToDetailResponse(Student student) => new()
+    {
+        Id = student.Id,
+        FullName = student.FullName,
+        GraduationYear = student.GraduationYear,
+        Gender = GenderToString(student.Gender),
+        School = student.School,
+        CreatedAt = student.CreatedAt,
+        Attendances = student.Attendances
+            .OrderByDescending(a => a.Date)
+            .Select(a => new AttendanceRecord
+            {
+                Id = a.Id,
+                Date = a.Date,
+                EventType = a.EventType.ToString(),
+                Notes = a.Notes,
+                CreatedAt = a.CreatedAt
+            })
+            .ToList()
+    };
 
     [HttpGet("inactive")]
     public async Task<ActionResult<List<InactiveStudentResponse>>> GetInactiveStudents([FromQuery] int weeks = 3)

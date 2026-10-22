@@ -8,32 +8,148 @@
 }
 else
 {
-    <h2>@_student.FullName</h2>
-    <dl>
-        <dt>Grade</dt>
-        <dd>@GradeHelper.GraduationYearToGrade(_student.GraduationYear)</dd>
-        <dt>Gender</dt>
-        <dd>@(_student.Gender ?? "Not specified")</dd>
-        <dt>School</dt>
-        <dd>@(_student.School ?? "Not specified")</dd>
-        <dt>Total Attendances</dt>
-        <dd>@_student.Attendances.Count</dd>
-    </dl>
-
-    <h3>Attendance Trend — Last 12 Weeks</h3>
-    <div class="chart">
-        @foreach (var w in _weeklyData)
-        {
-            <div class="bar-column" title="@w.Label: @w.Count attendance(s)">
-                <div class="bar" style="height: @(Math.Max(3, w.BarHeight))px; background: @w.BarColor;"></div>
-                <div class="bar-label">@w.ShortLabel</div>
+    @if (_editing)
+    {
+        <h2>Edit student</h2>
+        <form class="edit-form" @onsubmit="SaveAsync" @onsubmit:preventDefault>
+            <label>
+                Name
+                <input @bind="_form.FullName" maxlength="100" required />
+            </label>
+            <div class="edit-grid">
+                <label>
+                    Grade
+                    <select @bind="_form.GraduationYear">
+                        @foreach (var opt in GradeChoices())
+                        {
+                            <option value="@opt.Year">@opt.Label</option>
+                        }
+                    </select>
+                </label>
+                <label>
+                    Gender
+                    <select @bind="_form.Gender">
+                        <option value="">Not specified</option>
+                        <option value="Male">Male</option>
+                        <option value="Female">Female</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </label>
             </div>
+            <label>
+                School
+                <input @bind="_form.School" maxlength="100" placeholder="Not specified" />
+            </label>
+            @if (!string.IsNullOrEmpty(_saveError))
+            {
+                <p class="error">@_saveError</p>
+            }
+            <div class="edit-actions">
+                <button type="submit" disabled="@_saving">@(_saving ? "Saving..." : "Save")</button>
+                <button type="button" class="secondary outline" @onclick="CancelEdit" disabled="@_saving">Cancel</button>
+            </div>
+        </form>
+    }
+    else
+    {
+        <div class="title-row">
+            <h2>@_student.FullName</h2>
+            <button class="outline" @onclick="StartEdit">Edit details</button>
+        </div>
+        @if (_saved)
+        {
+            <p class="text-ok">Saved.</p>
         }
+        <dl>
+            <dt>Grade</dt>
+            <dd>@GradeHelper.GraduationYearToGrade(_student.GraduationYear) <span class="muted">(class of @_student.GraduationYear)</span></dd>
+            <dt>Gender</dt>
+            <dd>@(_student.Gender ?? "Not specified")</dd>
+            <dt>School</dt>
+            <dd>@(_student.School ?? "Not specified")</dd>
+        </dl>
+    }
+
+    <div class="kpi-row">
+        <div class="kpi">
+            <div class="kpi-label">Meetings attended</div>
+            <div class="kpi-value">@_stats.Attended <span class="kpi-of">of @_stats.Eligible</span></div>
+            <div class="kpi-sub">@(_stats.Eligible == 0 ? "since first visit" : $"{_stats.Rate * 100:0}% since first visit")</div>
+        </div>
+        <div class="kpi">
+            <div class="kpi-label">Current streak</div>
+            <div class="kpi-value">@_stats.Streak</div>
+            <div class="kpi-sub">meetings in a row</div>
+        </div>
+        <div class="kpi">
+            <div class="kpi-label">Last attended</div>
+            <div class="kpi-value">@(_stats.LastAttended?.ToString("MMM d") ?? "–")</div>
+            <div class="kpi-sub">@(_stats.LastAttended == null ? "" : DaysAgo(_stats.LastAttended.Value))</div>
+        </div>
+        <div class="kpi">
+            <div class="kpi-label">Total check-ins</div>
+            <div class="kpi-value">@_student.Attendances.Count</div>
+            <div class="kpi-sub">all time</div>
+        </div>
     </div>
-    <div class="chart-legend">
-        <span class="legend-green"></span> Attended
-        <span class="legend-gray" style="margin-left: 1rem;"></span> Did not attend
+
+    <div class="cal-header">
+        <h3>Attendance</h3>
+        <div class="presets" aria-label="Calendar range">
+            @foreach (var m in new[] { 3, 6, 12 })
+            {
+                <button class="@(m == _months ? "" : "outline secondary")" @onclick="@(() => SetRange(m))">@(m == 12 ? "1 year" : $"{m} months")</button>
+            }
+        </div>
     </div>
+
+    @if (_calendar.Rows.Count == 0)
+    {
+        <p class="muted">No meetings in this range.</p>
+    }
+    else
+    {
+        <div class="cal" style="--weeks:@_calendar.Weeks.Count" @onmouseleave="@(() => _hoverCell = null)">
+            <div class="cal-months">
+                <span></span>
+                @foreach (var w in _calendar.Weeks)
+                {
+                    <span>@(w.MonthLabel ?? "")</span>
+                }
+            </div>
+            @foreach (var row in _calendar.Rows)
+            {
+                <div class="cal-row">
+                    <span class="cal-day">@row.DayLabel</span>
+                    @foreach (var c in row.Cells)
+                    {
+                        var cell = c;
+                        <span class="cell @cell.State.ToString().ToLowerInvariant() @(cell == _hoverCell ? "hovered" : "")"
+                              tabindex="@(cell.State == CellState.None ? -1 : 0)"
+                              aria-label="@CellText(cell)"
+                              @onmouseenter="@(() => _hoverCell = cell)" @onfocus="@(() => _hoverCell = cell)"></span>
+                    }
+                </div>
+            }
+        </div>
+        <div class="cal-footer">
+            <div class="cal-legend">
+                <span><i class="cell attended"></i> Attended</span>
+                <span><i class="cell missed"></i> Missed</span>
+                <span><i class="cell none"></i> No meeting / before first visit</span>
+            </div>
+            <div class="cal-readout" aria-live="polite">
+                @if (_hoverCell != null)
+                {
+                    <strong>@_hoverCell.Date.ToString("ddd, MMM d")</strong> <span>@CellDetail(_hoverCell)</span>
+                }
+                else
+                {
+                    <span class="muted">Hover or tab to a day for details</span>
+                }
+            </div>
+        </div>
+    }
 
     <h3>Attendance History</h3>
     <table>
@@ -54,14 +170,42 @@ else
 }
 
 <style>
-    .chart { display: flex; align-items: flex-end; gap: 4px; height: 100px; padding: 10px 0; border-bottom: 1px solid #ccc; margin-bottom: 0.3rem; overflow-x: auto; }
-    .bar-column { display: flex; flex-direction: column; align-items: center; flex: 1; min-width: 32px; }
-    .bar { width: 20px; border-radius: 3px 3px 0 0; transition: height 0.3s; min-height: 3px; }
-    .bar-label { font-size: 0.65rem; color: #666; margin-top: 4px; white-space: nowrap; }
-    .chart-legend { font-size: 0.8rem; color: #555; margin-bottom: 1rem; }
-    .legend-green, .legend-gray { display: inline-block; width: 12px; height: 12px; border-radius: 2px; vertical-align: middle; margin-right: 4px; }
-    .legend-green { background: #4caf50; }
-    .legend-gray { background: #e0e0e0; }
+    .title-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1rem; }
+    .title-row h2 { margin: 0; }
+    .title-row button { padding: 0.3rem 0.8rem; font-size: 0.85rem; margin: 0; }
+    .muted { color: var(--pico-muted-color); }
+    .edit-form { max-width: 32rem; }
+    .edit-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 1rem; }
+    .edit-actions { display: flex; gap: 0.5rem; }
+    .edit-actions button { width: auto; }
+    .kpi-of { font-size: 0.9rem; font-weight: 400; color: var(--pico-muted-color); }
+
+    .cal-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem; margin-top: 1.5rem; }
+    .cal-header h3 { margin: 0; }
+    .presets { display: flex; gap: 0.35rem; }
+    .presets button { padding: 0.25rem 0.65rem; font-size: 0.8rem; margin: 0; width: auto; }
+
+    .cal { margin-top: 0.75rem; overflow-x: auto; padding-bottom: 2px; }
+    .cal-months, .cal-row { display: grid; grid-template-columns: 2.25rem repeat(var(--weeks), minmax(8px, 30px)); gap: 3px; }
+    .cal-months span { font-size: 0.7rem; color: var(--pico-muted-color); white-space: nowrap; overflow: visible; height: 1rem; }
+    .cal-row { margin-top: 3px; }
+    .cal-day { font-size: 0.7rem; color: var(--pico-muted-color); align-self: center; }
+    .cell { display: block; aspect-ratio: 1; border-radius: 3px; background: var(--viz-empty); outline: none; }
+    .cell.attended { background: var(--viz-series); }
+    .cell.missed { background: var(--viz-missed); }
+    .cell.attended, .cell.missed { cursor: pointer; }
+    .cell.hovered, .cell:focus-visible { box-shadow: 0 0 0 2px var(--viz-surface), 0 0 0 3px var(--pico-color); }
+
+    .cal-footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.5rem 1rem; margin: 0.6rem 0 1rem; font-size: 0.8rem; }
+    .cal-legend { display: flex; flex-wrap: wrap; gap: 0.35rem 1rem; color: var(--pico-muted-color); }
+    .cal-legend .cell { display: inline-block; width: 11px; height: 11px; vertical-align: -1px; margin-right: 0.25rem; }
+    .cal-readout { min-height: 1.2rem; }
+    .cal-readout span { color: var(--pico-muted-color); }
+    @@media (max-width: 600px) {
+        .edit-grid { grid-template-columns: 1fr; }
+        .cal-months, .cal-row { gap: 2px; grid-template-columns: 1.9rem repeat(var(--weeks), minmax(7px, 30px)); }
+        .cal-row { margin-top: 2px; }
+    }
 </style>
 
 @code {
@@ -69,7 +213,18 @@ else
 
     private StudentDetailResponse? _student;
     private bool _loading = true;
-    private List<WeeklyBar> _weeklyData = new();
+
+    private bool _editing;
+    private bool _saving;
+    private bool _saved;
+    private string? _saveError;
+    private UpdateStudentRequest _form = new();
+
+    private int _months = 6;
+    private List<DateTime> _meetingDates = new();
+    private Calendar _calendar = new();
+    private Cell? _hoverCell;
+    private StudentStats _stats = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -77,38 +232,165 @@ else
         {
             _student = await Api.GetStudentAsync(Id);
             if (_student != null)
-                _weeklyData = BuildWeeklyChart(_student.Attendances);
+                await LoadMeetingsAsync();
         }
         catch { }
         finally { _loading = false; }
     }
 
-    private static List<WeeklyBar> BuildWeeklyChart(List<AttendanceRecord> attendances)
+    // ── Editing ─────────────────────────────────────────────────────────
+
+    private void StartEdit()
     {
-        var today = DateTime.UtcNow.Date;
-        var bars = new List<WeeklyBar>();
+        _form = new UpdateStudentRequest
+        {
+            FullName = _student!.FullName,
+            GraduationYear = _student.GraduationYear,
+            Gender = _student.Gender ?? "",
+            School = _student.School ?? ""
+        };
+        _saveError = null;
+        _saved = false;
+        _editing = true;
+    }
 
-        var start = today.AddDays(-(12 * 7));
-        var daysToMonday = ((int)start.DayOfWeek - (int)DayOfWeek.Monday + 7) % 7;
-        start = start.AddDays(-daysToMonday);
+    private void CancelEdit() => _editing = false;
 
-        for (int w = 0; w < 12; w++)
+    private async Task SaveAsync()
+    {
+        _saving = true;
+        _saveError = null;
+        try
+        {
+            var updated = await Api.UpdateStudentAsync(Id, _form);
+            if (updated != null)
+            {
+                _student = updated;
+                RebuildCalendar();
+            }
+            _editing = false;
+            _saved = true;
+        }
+        catch (Exception ex) { _saveError = ex.Message; }
+        finally { _saving = false; }
+    }
+
+    private IEnumerable<(int Year, string Label)> GradeChoices()
+    {
+        var choices = Enumerable.Range(6, 7).Reverse()
+            .Select(g => (Year: GradeHelper.GradeLevelToGraduationYear(g), Label: $"{g}th"))
+            .ToList();
+        var lastClass = GradeHelper.GradeLevelToGraduationYear(13);
+        var current = _form.GraduationYear;
+        if (current <= lastClass)
+            choices.Add((current, $"Graduated (class of {current})"));
+        else
+            choices.Add((lastClass, $"Graduated (class of {lastClass})"));
+        if (current > GradeHelper.GradeLevelToGraduationYear(6))
+            choices.Insert(0, (current, $"{GradeHelper.GraduationYearToGrade(current)} (class of {current})"));
+        return choices;
+    }
+
+    // ── Attendance calendar ─────────────────────────────────────────────
+
+    private async Task SetRange(int months)
+    {
+        _months = months;
+        await LoadMeetingsAsync();
+    }
+
+    private async Task LoadMeetingsAsync()
+    {
+        // Meeting days = dates with any check-in, across the whole group.
+        var trends = await Api.GetTrendsAsync(null, DateTime.Today);
+        _meetingDates = trends?.AttendanceByDate.Select(d => d.Date.Date).Distinct().OrderBy(d => d).ToList() ?? new();
+        RebuildCalendar();
+    }
+
+    private void RebuildCalendar()
+    {
+        var attended = _student!.Attendances
+            .GroupBy(a => a.Date.Date)
+            .ToDictionary(g => g.Key, g => g.ToList());
+        var firstVisit = attended.Count > 0 ? attended.Keys.Min() : (DateTime?)null;
+
+        _stats = BuildStats(attended, firstVisit);
+        _calendar = BuildCalendar(attended, firstVisit);
+        _hoverCell = null;
+    }
+
+    private StudentStats BuildStats(Dictionary<DateTime, List<AttendanceRecord>> attended, DateTime? firstVisit)
+    {
+        var stats = new StudentStats { LastAttended = attended.Count > 0 ? attended.Keys.Max() : null };
+        if (firstVisit == null) return stats;
+
+        var eligible = _meetingDates.Union(attended.Keys).Where(d => d >= firstVisit).OrderBy(d => d).ToList();
+        stats.Eligible = eligible.Count;
+        stats.Attended = eligible.Count(attended.ContainsKey);
+        for (int i = eligible.Count - 1; i >= 0 && attended.ContainsKey(eligible[i]); i--)
+            stats.Streak++;
+        return stats;
+    }
+
+    private Calendar BuildCalendar(Dictionary<DateTime, List<AttendanceRecord>> attended, DateTime? firstVisit)
+    {
+        var cal = new Calendar();
+        var today = DateTime.Today;
+        var start = today.AddMonths(-_months);
+        start = start.AddDays(-(int)start.DayOfWeek); // back to Sunday
+        var weekCount = (int)((today - start).TotalDays / 7) + 1;
+
+        var meetingSet = _meetingDates.Where(d => d >= start && d <= today).ToHashSet();
+        meetingSet.UnionWith(attended.Keys.Where(d => d >= start && d <= today));
+
+        // Only show weekdays the group actually met on, so the grid stays dense.
+        var days = meetingSet.Select(d => d.DayOfWeek).Distinct().OrderBy(d => d).ToList();
+
+        // Label the first week of each month (and the first column, unless a month label follows right after).
+        for (int w = 0; w < weekCount; w++)
         {
             var weekStart = start.AddDays(w * 7);
-            var weekEnd = weekStart.AddDays(6);
-            var count = attendances.Count(a => a.Date >= weekStart && a.Date <= weekEnd);
-
-            bars.Add(new WeeklyBar
-            {
-                Label = $"{weekStart:MMM d} - {weekEnd:MMM d}",
-                ShortLabel = weekStart.ToString("M/d"),
-                Count = count,
-                BarHeight = count > 0 ? Math.Max(12, (int)((double)count / 3 * 80)) : 3,
-                BarColor = count > 0 ? "#4caf50" : "#e0e0e0"
-            });
+            var label = weekStart.Day <= 7 || (w == 0 && weekStart.Day <= 17) ? weekStart.ToString("MMM") : null;
+            cal.Weeks.Add(new Week { MonthLabel = label });
         }
 
-        return bars;
+        foreach (var day in days)
+        {
+            var row = new Row { DayLabel = day.ToString()[..3] };
+            for (int w = 0; w < weekCount; w++)
+            {
+                var date = start.AddDays(w * 7 + (int)day);
+                var state = CellState.None;
+                if (attended.ContainsKey(date))
+                    state = CellState.Attended;
+                else if (date <= today && meetingSet.Contains(date) && date >= firstVisit)
+                    state = CellState.Missed;
+                row.Cells.Add(new Cell
+                {
+                    Date = date,
+                    State = state,
+                    Events = attended.TryGetValue(date, out var recs) ? recs : null,
+                    IsMeeting = meetingSet.Contains(date)
+                });
+            }
+            cal.Rows.Add(row);
+        }
+        return cal;
+    }
+
+    private string CellDetail(Cell c) => c.State switch
+    {
+        CellState.Attended => "Attended · " + string.Join(", ", c.Events!.Select(e => FormatEventType(e.EventType))),
+        CellState.Missed => "Missed (group met)",
+        _ => c.IsMeeting ? "Before first visit" : "No meeting"
+    };
+
+    private string CellText(Cell c) => $"{c.Date:MMM d}: {CellDetail(c)}";
+
+    private static string DaysAgo(DateTime d)
+    {
+        var days = (DateTime.Today - d.Date).Days;
+        return days switch { 0 => "today", 1 => "yesterday", _ => $"{days} days ago" };
     }
 
     private static string FormatEventType(string type) => type switch
@@ -120,12 +402,36 @@ else
         _ => type
     };
 
-    private class WeeklyBar
+    private enum CellState { None, Attended, Missed }
+
+    private class Calendar
     {
-        public string Label { get; set; } = "";
-        public string ShortLabel { get; set; } = "";
-        public int Count { get; set; }
-        public int BarHeight { get; set; }
-        public string BarColor { get; set; } = "#e0e0e0";
+        public List<Week> Weeks { get; } = new();
+        public List<Row> Rows { get; } = new();
+    }
+
+    private class Week { public string? MonthLabel { get; set; } }
+
+    private class Row
+    {
+        public string DayLabel { get; set; } = "";
+        public List<Cell> Cells { get; } = new();
+    }
+
+    private class Cell
+    {
+        public DateTime Date { get; set; }
+        public CellState State { get; set; }
+        public List<AttendanceRecord>? Events { get; set; }
+        public bool IsMeeting { get; set; }
+    }
+
+    private class StudentStats
+    {
+        public int Attended { get; set; }
+        public int Eligible { get; set; }
+        public int Streak { get; set; }
+        public DateTime? LastAttended { get; set; }
+        public double Rate => Eligible == 0 ? 0 : (double)Attended / Eligible;
     }
 }

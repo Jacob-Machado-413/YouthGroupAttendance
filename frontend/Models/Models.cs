@@ -69,6 +69,14 @@ public class InactiveStudentResponse
     public bool NeverAttended { get; set; }
 }
 
+public class UpdateStudentRequest
+{
+    public string FullName { get; set; } = string.Empty;
+    public int GraduationYear { get; set; }
+    public string? Gender { get; set; }
+    public string? School { get; set; }
+}
+
 public class MergeStudentsRequest
 {
     public int SourceStudentId { get; set; }
@@ -87,6 +95,9 @@ public class AttendanceTrendsResponse
 {
     public int TotalStudents { get; set; }
     public int TotalAttendances { get; set; }
+    public int MeetingCount { get; set; }
+    public int UniqueStudents { get; set; }
+    public double AveragePerMeeting { get; set; }
     public List<AttendanceByDate> AttendanceByDate { get; set; } = new();
     public List<GradeBreakdown> GradeBreakdown { get; set; } = new();
 }
